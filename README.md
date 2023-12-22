@@ -11,7 +11,6 @@ This api have some requirement:
  - MetalLB installed
  - Longhorn installed 
  - Port 8888 must be open and not used
-## Requirement
 
 
 ## Install
