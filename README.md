@@ -46,8 +46,6 @@ Now apik3s tart listening on port 8888 automaticaly.
 For use this api a client must send http request to the api server. \
 In Request sections you can see all supported request.
 
-there are four get request for this api.
-
 ## GET Request
 
 | request path | request scope |
