@@ -15,12 +15,11 @@ This api have some requirement:
 
 ## Install
 
-For use apik3s software you can download the apik3s.tar.xz and unzip it. \
-Inside there is apik3s executable file. \
+For use apik3s software you can download the apik3s exec from desired release. \
 You can use this by running it or create a new systemd service for automate api start on system boot for example:
 
 ```bash
-tar -xvf apik3s.tar.xz -C /usr/local/bin/
+mv apik3s /usr/local/bin/apik3s
 vi /etc/systemd/system/apik3s.service
 ```
 
