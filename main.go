@@ -3,7 +3,7 @@ NAME=APIK3S
 AUTHOR=RH363
 DATE=12/2023
 COMPANY=SEEWEB
-VERSION=1.2
+VERSION=1.3
 
 DESCRIPTION:
 
@@ -48,12 +48,12 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-var clientset *kubernetes.Clientset
-var metallbClientSet *v1beta1.Clientset
-var ConfigMapName string = "nfs-server-conf"
-var MetallbNamespace string = "metallb-system"
+var clientset *kubernetes.Clientset            //client set for k3s api
+var metallbClientSet *v1beta1.Clientset        //client set for metallb api
+var ConfigMapName string = "nfs-server-conf"   //configmap name
+var MetallbNamespace string = "metallb-system" //metallb default namespace
 
-// k3s api ERROR
+// // k3s api ERROR
 // deploy ERROR
 var ErrDeployAlreadyExist error = errors.New("deploy already exist")
 var ErrCantCreateDeploy error = errors.New("cannot create deploy")
@@ -96,7 +96,7 @@ var ErrIPAddressPoolAlreadyExist error = errors.New("IPAddressPool already exist
 var ErrCantCreateConfigMap error = errors.New("cannot create configmap")
 var ErrCantDeleteConfigMap error = errors.New("cannot delete configmap")
 
-// apik3s ERROR
+// // apik3s ERROR
 // JSON ERROR
 var ErrBadJsonFormat error = errors.New("Json format used is not valid")
 
@@ -135,7 +135,7 @@ func makeString(s string) *string { //return string in specific format
 // ------------------------------------------------------------------------------------------------------------------------------k3s api functions
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ipadresspool functions
 
-func getIPAddressPoolsDEV() (*metallbv1.IPAddressPoolList, error) { //get ip address pool function
+func getIPAddressPoolsDEV() (*metallbv1.IPAddressPoolList, error) { //get ip address pool function, return ip address list and an error if present withouth printing list
 
 	fmt.Println("Listing IP address pool: ")
 	ipAddressPoolClient := metallbClientSet.IPAddressPool(MetallbNamespace) //create ip address pool client for api
@@ -148,7 +148,7 @@ func getIPAddressPoolsDEV() (*metallbv1.IPAddressPoolList, error) { //get ip add
 	return list, nil
 }
 
-func getIPAddressPools() (*metallbv1.IPAddressPoolList, error) { //get ip address pool function
+func getIPAddressPools() (*metallbv1.IPAddressPoolList, error) { //get ip address pool function,return ip address list and an error if present
 
 	fmt.Println("Listing IP address pool: ")
 	ipAddressPoolClient := metallbClientSet.IPAddressPool(MetallbNamespace) //create ip address pool client for api
@@ -168,10 +168,10 @@ func getIPAddressPools() (*metallbv1.IPAddressPoolList, error) { //get ip addres
 	return list, nil
 }
 
-func createIPAdressPool(poolname string, pool []string) error {
+func createIPAdressPool(poolname string, pool []string) error { // create a new ip address pool require ip address pool name and pool array
 	fmt.Println("[0/3]try to create new namespace...")
 
-	list, err := getnamespacesDEV() //check if ipaddress already exist
+	list, err := getnamespacesDEV() //get current ip address pools
 
 	if err != nil {
 		return ErrCantGetIPAddressPool
@@ -179,7 +179,7 @@ func createIPAdressPool(poolname string, pool []string) error {
 
 	for _, ipaddresspool := range list.Items {
 		if ipaddresspool.Name == poolname {
-			fmt.Println("ip address pool: \"" + poolname + "\" already exists")
+			fmt.Println("ip address pool: \"" + poolname + "\" already exists") //check if ipaddress already exist
 			return ErrIPAddressPoolAlreadyExist
 		}
 	}
@@ -311,8 +311,8 @@ func deleteL2Advertisement(id string) error { //delete L2Advertisement function(
 }
 
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ deploys function
-func createdeploy(namespace string, ID string, pvc string, container string) error { //create deploy function (namespace target,deploy name and pod name(use it for match label),pvc volume name)
-	fmt.Println("[0/3]try to create new deploy...")
+func createNFSdeploy(namespace string, ID string, pvc string) error { //create nfs deploy function (namespace target,deploy name and pod name(use it for match label),pvc volume name)
+	fmt.Println("[0/3]try to create new nfs deploy...")
 
 	list, err := getdeploysDEV(namespace) //check if deploy already exist
 
@@ -322,7 +322,7 @@ func createdeploy(namespace string, ID string, pvc string, container string) err
 
 	for _, deploy := range list.Items {
 		if deploy.Name == ID {
-			fmt.Println("deploy: \"" + ID + "\" already exists")
+			fmt.Println("nfs deploy: \"" + ID + "\" already exists")
 			return ErrDeployAlreadyExist
 		}
 	}
@@ -332,75 +332,75 @@ func createdeploy(namespace string, ID string, pvc string, container string) err
 
 	var deployment *appsv1.Deployment
 
-	switch container {
-	case "nfs":
-		deployment = &appsv1.Deployment{ //create deployment for api (use similar json format)
-			ObjectMeta: metav1.ObjectMeta{
-				Name: ID, //deployment id
+	deployment = &appsv1.Deployment{ //create deployment for api (use similar json format)
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ID, //deployment id
+			Labels: map[string]string{
+				"type": "nfs",
 			},
-			Spec: appsv1.DeploymentSpec{ //deployment specs
-				Replicas: int32Ptr(2), //replica number
-				Selector: &metav1.LabelSelector{ //deployment selector
-					MatchLabels: map[string]string{
+		},
+		Spec: appsv1.DeploymentSpec{ //deployment specs
+			Replicas: int32Ptr(1), //replica number
+			Selector: &metav1.LabelSelector{ //deployment selector
+				MatchLabels: map[string]string{
+					"ID": ID,
+				},
+			},
+			Template: apiv1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{ //pod label for selector
 						"ID": ID,
 					},
 				},
-				Template: apiv1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{ //pod label for selector
-							"ID": ID,
+				Spec: apiv1.PodSpec{ //pod specs
+					Containers: []apiv1.Container{
+						{
+							Name:  "nfs-server",                 //container name
+							Image: "alphayax/docker-volume-nfs", //container image
+							Ports: []apiv1.ContainerPort{
+								{
+									Name:          "nfs", //nfs port
+									ContainerPort: 2049,
+								},
+								{
+									Name:          "mountd", //mountd port
+									ContainerPort: 20048,
+								},
+								{
+									Name:          "rpcbind", //rpcbin port
+									ContainerPort: 111,
+								},
+							},
+							SecurityContext: &apiv1.SecurityContext{
+								Privileged: setTrue(), //set security context to privileged
+							},
+							VolumeMounts: []apiv1.VolumeMount{ //mount pvc volume
+								{
+									Name:      "storage",
+									MountPath: "/exports",
+								},
+								{
+									Name:      ConfigMapName,
+									MountPath: "/etc/exports.d/",
+								},
+							},
 						},
 					},
-					Spec: apiv1.PodSpec{ //pod specs
-						Containers: []apiv1.Container{
-							{
-								Name:  "nfs-server",                 //container name
-								Image: "alphayax/docker-volume-nfs", //"k8s.gcr.io/volume-nfs:0.8", //container image
-								Ports: []apiv1.ContainerPort{
-									{
-										Name:          "nfs", //nfs port
-										ContainerPort: 2049,
-									},
-									{
-										Name:          "mountd", //mountd port
-										ContainerPort: 20048,
-									},
-									{
-										Name:          "rpcbind", //rpcbin port
-										ContainerPort: 111,
-									},
-								},
-								SecurityContext: &apiv1.SecurityContext{
-									Privileged: setTrue(), //set security context to privileged
-								},
-								VolumeMounts: []apiv1.VolumeMount{ //mount pvc volume
-									{
-										Name:      "storage",
-										MountPath: "/exports",
-									},
-									{
-										Name:      ConfigMapName,
-										MountPath: "/etc/exports.d/",
-									},
+					Volumes: []apiv1.Volume{ //declare pvc volume
+						{
+							Name: "storage",
+							VolumeSource: apiv1.VolumeSource{
+								PersistentVolumeClaim: &apiv1.PersistentVolumeClaimVolumeSource{
+									ClaimName: pvc,
 								},
 							},
 						},
-						Volumes: []apiv1.Volume{ //declare pvc volume
-							{
-								Name: "storage",
-								VolumeSource: apiv1.VolumeSource{
-									PersistentVolumeClaim: &apiv1.PersistentVolumeClaimVolumeSource{
-										ClaimName: pvc,
-									},
-								},
-							},
-							{
-								Name: ConfigMapName,
-								VolumeSource: apiv1.VolumeSource{
-									ConfigMap: &apiv1.ConfigMapVolumeSource{
-										LocalObjectReference: apiv1.LocalObjectReference{
-											Name: ConfigMapName,
-										},
+						{
+							Name: ConfigMapName,
+							VolumeSource: apiv1.VolumeSource{
+								ConfigMap: &apiv1.ConfigMapVolumeSource{
+									LocalObjectReference: apiv1.LocalObjectReference{
+										Name: ConfigMapName,
 									},
 								},
 							},
@@ -408,20 +408,122 @@ func createdeploy(namespace string, ID string, pvc string, container string) err
 					},
 				},
 			},
-		}
-	case "samba":
-		return errors.New("samba not implemented fo now")
-	default:
-		return ErrContainerUnsupported
+		},
 	}
 
-	fmt.Println("[2/3]deploy declared")
+	fmt.Println("[2/3]nfs deploy declared")
 	result, err := deploymentsClient.Create(context.TODO(), deployment, metav1.CreateOptions{}) //create deploy using deployment client and deploy file
 	if err != nil {
 		fmt.Println(err)
 		return ErrCantCreateDeploy
 	}
-	fmt.Printf("[3/3]Created deployment \"%q\".\n", result.GetObjectMeta().GetName())
+	fmt.Printf("[3/3]Created nfs deployment \"%q\".\n", result.GetObjectMeta().GetName())
+	return nil
+}
+
+func createSMBdeploy(namespace string, ID string, pvc string, users []smbuser, worksgroup string) error { //create smb deploy function (namespace target,deploy name and pod name(use it for match label),pvc volume name,users array([username=***,password=***],samba workgroup),)
+	fmt.Println("[0/3]try to create new smb deploy...")
+	usersDeployFmt := ""
+	for _, user := range users {
+		usersDeployFmt = usersDeployFmt + user.Username + "=" + user.Password + ";"
+	}
+
+	list, err := getdeploysDEV(namespace) //check if deploy already exist
+
+	if err != nil {
+		return ErrCantGetDeploy
+	}
+
+	for _, deploy := range list.Items {
+		if deploy.Name == ID {
+			fmt.Println("smb deploy: \"" + ID + "\" already exists")
+			return ErrDeployAlreadyExist
+		}
+	}
+
+	deploymentsClient := clientset.AppsV1().Deployments(namespace) //create deployment client for api
+	fmt.Println("[1/3]client set acquired")
+
+	var deployment *appsv1.Deployment
+
+	deployment = &appsv1.Deployment{ //create deployment for api (use similar json format)
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ID, //deployment id
+			Labels: map[string]string{
+				"type": "smb",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{ //deployment specs
+			Replicas: int32Ptr(1), //replica number
+			Selector: &metav1.LabelSelector{ //deployment selector
+				MatchLabels: map[string]string{
+					"ID": ID,
+				},
+			},
+			Template: apiv1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{ //pod label for selector
+						"ID": ID,
+					},
+				},
+				Spec: apiv1.PodSpec{ //pod specs
+					Containers: []apiv1.Container{
+						{
+							Name:  "smb-server",                 //container name
+							Image: "raspyhades363/samba-server", //container image
+							Env: []apiv1.EnvVar{
+								{
+									Name:  "SMBUSERS",
+									Value: usersDeployFmt,
+								},
+								{
+									Name:  "SMBWORKGROUP",
+									Value: worksgroup,
+								},
+							},
+							Ports: []apiv1.ContainerPort{
+								{
+									Name:          "smb", //smb port
+									ContainerPort: 445,
+								},
+								{
+									Name:          "nmb", //nmb port
+									ContainerPort: 139,
+								},
+							},
+							SecurityContext: &apiv1.SecurityContext{
+								Privileged: setTrue(), //set security context to privileged
+							},
+							VolumeMounts: []apiv1.VolumeMount{ //mount pvc volume
+								{
+									Name:      "storage",
+									MountPath: "/sharing",
+								},
+							},
+						},
+					},
+					Volumes: []apiv1.Volume{ //declare pvc volume
+						{
+							Name: "storage",
+							VolumeSource: apiv1.VolumeSource{
+								PersistentVolumeClaim: &apiv1.PersistentVolumeClaimVolumeSource{
+									ClaimName: pvc,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	fmt.Println("[2/3]smb deploy declared")
+	result, err := deploymentsClient.Create(context.TODO(), deployment, metav1.CreateOptions{}) //create deploy using deployment client and deploy file
+	if err != nil {
+		fmt.Println(err)
+		return ErrCantCreateDeploy
+	}
+	fmt.Printf("[3/3]Created smb deployment \"%q\".\n", result.GetObjectMeta().GetName())
 	return nil
 }
 
@@ -470,8 +572,8 @@ func getdeploysDEV(namespace string) (*appsv1.DeploymentList, error) { //get dep
 }
 
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++service functions
-func createservice(serviceID string, namespace string, ID string, IP string) error { //create service function (service ID(service name),namespace target,deployment target id,external ip)
-	fmt.Println("[0/3]try to create new service...")
+func createNFSservice(serviceID string, namespace string, ID string, IP string) error { //create nfs service function (service ID(service name),namespace target,deployment target id,external ip)
+	fmt.Println("[0/3]try to create new nfs service...")
 
 	list, err := getservicesDEV(namespace) //check if service already exist
 
@@ -481,7 +583,7 @@ func createservice(serviceID string, namespace string, ID string, IP string) err
 
 	for _, service := range list.Items {
 		if service.Name == serviceID {
-			fmt.Println("service: \"" + serviceID + "\" already exists")
+			fmt.Println("nfs service: \"" + serviceID + "\" already exists")
 			return ErrServiceAlreadyExist
 		}
 	}
@@ -515,7 +617,6 @@ func createservice(serviceID string, namespace string, ID string, IP string) err
 			Selector: map[string]string{ //deployments to expose, find by ID
 				"ID": ID,
 			},
-			//LoadBalancerIP: IP,
 		},
 	}
 
@@ -543,18 +644,97 @@ func createservice(serviceID string, namespace string, ID string, IP string) err
 				Selector: map[string]string{ //deployments to expose, find by ID
 					"ID": ID,
 				},
-				//LoadBalancerIP: IP,
 			},
 		}
 	}
 
-	fmt.Println("[2/3]service declared")
+	fmt.Println("[2/3]nfs service declared")
 	result, err := svcClient.Create(context.TODO(), service, metav1.CreateOptions{}) //create service
 	if err != nil {
 		fmt.Println(err)
 		return ErrCantCreateService
 	}
-	fmt.Printf("[3/3]Service created: \"%q\".\n", result.GetObjectMeta().GetName())
+	fmt.Printf("[3/3]nfs Service created: \"%q\".\n", result.GetObjectMeta().GetName())
+	return nil
+}
+
+func createSMBservice(serviceID string, namespace string, ID string, IP string) error { //create smb service function (service ID(service name),namespace target,deployment target id,external ip)
+	fmt.Println("[0/3]try to create new smb service...")
+
+	list, err := getservicesDEV(namespace) //check if service already exist
+
+	if err != nil {
+		return ErrCantGetService
+	}
+
+	for _, service := range list.Items {
+		if service.Name == serviceID {
+			fmt.Println("smb service: \"" + serviceID + "\" already exists")
+			return ErrServiceAlreadyExist
+		}
+	}
+
+	svcClient := clientset.CoreV1().Services(namespace) //create service client for api
+	fmt.Println("[1/3]client set acquired")
+
+	service := &apiv1.Service{ //create service file for k3s api
+		ObjectMeta: metav1.ObjectMeta{
+			Name: serviceID,
+			Annotations: map[string]string{
+				"metallb.universe.tf/loadBalancerIPs": IP,
+			},
+		},
+		Spec: apiv1.ServiceSpec{
+			Type: apiv1.ServiceTypeLoadBalancer,
+			Ports: []apiv1.ServicePort{ //exposed ports
+				{
+					Name: "smb",
+					Port: 445,
+				},
+				{
+					Name: "nmb",
+					Port: 139,
+				},
+			},
+			Selector: map[string]string{ //deployments to expose, find by ID
+				"ID": ID,
+			},
+			//LoadBalancerIP: IP,
+		},
+	}
+
+	if IP == "auto" || IP == "" {
+		service = &apiv1.Service{ //create service file for k3s api
+			ObjectMeta: metav1.ObjectMeta{
+				Name: serviceID,
+			},
+			Spec: apiv1.ServiceSpec{
+				Type: apiv1.ServiceTypeLoadBalancer,
+				Ports: []apiv1.ServicePort{ //exposed ports
+					{
+						Name: "smb",
+						Port: 445,
+					},
+					{
+						Name: "nmb",
+						Port: 139,
+					},
+				},
+				Selector: map[string]string{ //deployments to expose, find by ID
+					"ID": ID,
+				},
+				//LoadBalancerIP: IP,
+			},
+		}
+	}
+
+	fmt.Println("[2/3]smb service declared")
+	result, err := svcClient.Create(context.TODO(), service, metav1.CreateOptions{}) //create service
+	if err != nil {
+		fmt.Println(err)
+		return ErrCantCreateService
+	}
+	fmt.Printf("[3/3]smb service created: \"%q\".\n", result.GetObjectMeta().GetName())
 	return nil
 }
 
@@ -767,7 +947,7 @@ func getpvcsbyid(namespace string, id string) (*apiv1.PersistentVolumeClaim, err
 	return nil, ErrPVCNotFound
 }
 
-// ------------------------------------------------------------------------------------------------------------------------------create namespace
+// ------------------------------------------------------------------------------------------------------------------------------namespace
 func createnamespace(Namespace string) error { //create namespace function (namespace name))
 	fmt.Println("[0/3]try to create new namespace...")
 
@@ -849,6 +1029,7 @@ func deletenamespace(Namespace string) error { //delete namespace function(names
 	return nil
 }
 
+// ------------------------------------------------------------------------------------------------------------------------------configmap
 func createconfigmap(Namespace string) error { //create configmap
 	fmt.Println("[0/3]try to create new configmap...")
 
@@ -861,7 +1042,7 @@ func createconfigmap(Namespace string) error { //create configmap
 			Namespace: Namespace,
 		},
 		Data: map[string]string{
-			"share": "/exports *(rw,sync,no_root_squash,insecure)",
+			"share": "/exports *(rw,fsid=0,insecure,no_root_squash)",
 		},
 	}
 
@@ -891,6 +1072,34 @@ func deleteconfigmap(Namespace string) error { //delete cofigmap function(namesp
 
 // -------------------------------------------------------------------------------------------------------------------------------api rest functions
 
+var explain = []Response{
+	{Message: "Welcome in my api, in the following messages you can see different option"},
+	{Message: "WARNING all instruction behind ** chars must be replaced with your data"},
+	{Message: "For get your storage servers send a GET request to: /apik3s/storage/*namespace*"},
+	{Message: "For get all workspace send a GET request to: /apik3s/storage/"},
+	{Message: "For create a new nfs server send a POST request to: /apik3s/nfsstorage/*namespace*"},
+	{Message: `WARNING using POST request for create a new nfs server require an json file with the following structure:`},
+	{Message: `{"id":"*your nfs server id*","size":"*your nfs storage size in GB*","ip":"*server ip*"}`},
+	{Message: `EX: {"id": "testserver","size": 3,"ip": "10.2.15.224"}`},
+	{Message: `for auto assign ip insert : "auto" or ""`},
+	{Message: "For create a new smb server send a POST request to: /apik3s/smbstorage/*namespace*"},
+	{Message: `WARNING using POST request for create a new nfs server require an json file with the following structure:`},
+	{Message: `{"id":"*your nfs server id*","size":"*your nfs storage size in GB*","ip":"*server ip*","users":[{"username":*"client username"*,"password":*"client password*"}],"workgroup":"*workgroup name*}"`},
+	{Message: `EX: {"id": "testserver","size": 3,"ip": "10.2.15.224","workgroup":"myworkgroup","users":[{"username":"sambauser","password":"samba"}]}`},
+	{Message: `for auto assign ip insert : "auto" or ""`},
+	{Message: "For delete an storage server send a DELETE request to: /apik3s/storage/*insert namespace*/*insert server id*"},
+	{Message: "For delete all storage server in a workspace send a DELETE request to: /apik3s/storage/*insert namespace*"},
+	{Message: "For increment an storage server size send a PATCH request to: /apik3s/storage/*insert namespace*/*insert server id*"},
+	{Message: `WARNING using PATCH request for increment an storage server size require an json file with the following structure:`},
+	{Message: `{"size":"*your storage size in GB*"}`},
+	{Message: `EX: {"size": 5}`},
+	{Message: "For get all IPs pool send a GET request to: /apik3s/IPs/"},
+	{Message: "For create a IPs pool send a POST request to: /apik3s/IPs/"},
+	{Message: `WARNING using POST request for create a IPsPool require an json file with the following structure:`},
+	{Message: `{"id":"*your ips pool name*,[*ip address list*]}`},
+	{Message: `EX: {"id":"mypool","ips":["192.168.1.12-192.168.1.54","10.2.15.141-10.2.15.143"]}`},
+}
+
 type DeleteResponse struct {
 	Message string `json:"message"`
 	ID      string `json:"id"`
@@ -909,34 +1118,23 @@ type IPpool struct {
 	Ips []string `json:"ips"`
 }
 
-var explain = []Response{
-	{Message: "Welcome in my api, in the following messages you can see different option"},
-	{Message: "WARNING all instruction behind ** chars must be replaced with your data"},
-	{Message: "For get your nfs servers send a GET request to: /apik3s/storage/*namespace*"},
-	{Message: "For get all workspace send a GET request to: /apik3s/storage/"},
-	{Message: "For create a new nfs server send a POST request to: /apik3s/storage/*namespace*"},
-	{Message: `WARNING using POST request for create a new nfs server require an json file with the following structure:`},
-	{Message: `{"id":"*your nfs server id*","size":"*your nfs storage size in GB*","type":"*your storage type ex. nfs or samba*","ip":"*server ip*"}`},
-	{Message: `EX: {"id": "testserver","size": 3,"type": "nfs","ip": "10.2.15.224"}`},
-	{Message: `for auto assign ip insert : "auto" or ""`},
-	{Message: "For delete an nfs server send a DELETE request to: /apik3s/storage/*insert namespace*/*insert server id*"},
-	{Message: "For delete all nfs server in a workspace send a DELETE request to: /apik3s/storage/*insert namespace*"},
-	{Message: "For increment an nfs server size send a PATCH request to: /apik3s/storage/*insert namespace*/*insert server id*"},
-	{Message: `WARNING using PATCH request for increment an nfs server size require an json file with the following structure:`},
-	{Message: `{"size":"*your nfs storage size in GB*"}`},
-	{Message: `EX: {"size": 5}`},
-	{Message: "For get all IPs pool send a GET request to: /apik3s/IPs/"},
-	{Message: "For create a IPs pool send a POST request to: /apik3s/IPs/"},
-	{Message: `WARNING using POST request for create a IPsPool require an json file with the following structure:`},
-	{Message: `{"id":"*your ips pool name*,[*ip address list*]}`},
-	{Message: `EX: {"id":"mypool","ips":["192.168.1.12-192.168.1.54","10.2.15.141-10.2.15.143"]}`},
-}
-
-type CreateRequests struct {
+type CreateNFSRequests struct {
 	ID   string `json:"id"`
 	Size int    `json:"size"`
-	Type string `json:"type"`
 	IP   string `json:"ip"`
+}
+
+type CreateSMBRequests struct {
+	ID        string    `json:"id"`
+	Size      int       `json:"size"`
+	IP        string    `json:"ip"`
+	WORKGROUP string    `json:"workgroup"`
+	Users     []smbuser `json:"users"`
+}
+
+type smbuser struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type ExtendRequests struct {
@@ -1003,10 +1201,10 @@ func getStorages(context *gin.Context) {
 	context.IndentedJSON(http.StatusOK, servicesJSON)
 }
 
-func addStorage(context *gin.Context) {
+func addSMBStorage(context *gin.Context) {
 	namespace := context.Param("namespace")
 
-	var request CreateRequests
+	var request CreateSMBRequests
 
 	if err := context.BindJSON(&request); err != nil {
 		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrBadJsonFormat.Error()})
@@ -1031,12 +1229,12 @@ func addStorage(context *gin.Context) {
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 				return
 			}
-			if err := createdeploy(namespace, request.ID, request.ID, request.Type); err != nil {
+			if err := createSMBdeploy(namespace, request.ID, request.ID, request.Users, request.WORKGROUP); err != nil {
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 				deletepvc(namespace, request.ID)
 				return
 			}
-			if err := createservice(request.ID, namespace, request.ID, request.IP); err != nil {
+			if err := createSMBservice(request.ID, namespace, request.ID, request.IP); err != nil {
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 				deletedeploy(namespace, request.ID)
 				deletepvc(namespace, request.ID)
@@ -1067,14 +1265,96 @@ func addStorage(context *gin.Context) {
 		}
 		return
 	}
-	if err := createdeploy(namespace, request.ID, request.ID, request.Type); err != nil {
+	if err := createSMBdeploy(namespace, request.ID, request.ID, request.Users, request.WORKGROUP); err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		if err := deletenamespace(namespace); err != nil {
 			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		}
 		return
 	}
-	if err := createservice(request.ID, namespace, request.ID, request.IP); err != nil {
+	if err := createSMBservice(request.ID, namespace, request.ID, request.IP); err != nil {
+		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+		if err := deletenamespace(namespace); err != nil {
+			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+		}
+		return
+	}
+	context.IndentedJSON(http.StatusCreated, request)
+	return
+}
+
+func addNFSStorage(context *gin.Context) {
+	namespace := context.Param("namespace")
+
+	var request CreateNFSRequests
+
+	if err := context.BindJSON(&request); err != nil {
+		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrBadJsonFormat.Error()})
+		return
+	}
+
+	if request.Size < 1 {
+		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrInvalidSize.Error()})
+		return
+	}
+
+	size := strconv.Itoa(request.Size) + "Gi"
+
+	namespacelist, err := getnamespacesDEV()
+	if err != nil {
+		context.IndentedJSON(http.StatusNotFound, Response{Message: err.Error()})
+		return
+	}
+	for _, ns := range namespacelist.Items {
+		if ns.Name == namespace {
+			if err := createpvc(namespace, request.ID, size); err != nil {
+				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+				return
+			}
+			if err := createNFSdeploy(namespace, request.ID, request.ID); err != nil {
+				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+				deletepvc(namespace, request.ID)
+				return
+			}
+			if err := createNFSservice(request.ID, namespace, request.ID, request.IP); err != nil {
+				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+				deletedeploy(namespace, request.ID)
+				deletepvc(namespace, request.ID)
+				return
+			}
+			context.IndentedJSON(http.StatusCreated, request)
+			return
+		}
+	}
+
+	if err := createnamespace(namespace); err != nil {
+		context.IndentedJSON(http.StatusInternalServerError, ErrCantCreateNamespace)
+		return
+	}
+
+	if err := createconfigmap(namespace); err != nil {
+		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+		if err := deletenamespace(namespace); err != nil {
+			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+		}
+		return
+	}
+
+	if err := createpvc(namespace, request.ID, size); err != nil {
+		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+		if err := deletenamespace(namespace); err != nil {
+			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+		}
+		return
+	}
+	if err := createNFSdeploy(namespace, request.ID, request.ID); err != nil {
+		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+		if err := deletenamespace(namespace); err != nil {
+			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+		}
+		return
+	}
+	if err := createNFSservice(request.ID, namespace, request.ID, request.IP); err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		if err := deletenamespace(namespace); err != nil {
 			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
@@ -1146,6 +1426,8 @@ func extendStorage(context *gin.Context) {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
+
+	context.IndentedJSON(http.StatusOK, Response{Message: "updated to " + pvcsize + "GB"})
 }
 
 func getIPs(context *gin.Context) {
@@ -1234,11 +1516,12 @@ func main() {
 	router.GET("/apik3s/storage/:namespace", getStorages)
 	router.GET("/apik3s/storage/", getWorkspace)
 	router.GET("/apik3s/IPs/", getIPs)
-	router.POST("/apik3s/storage/:namespace", addStorage)
+	router.POST("/apik3s/nfsstorage/:namespace", addNFSStorage)
+	router.POST("/apik3s/smbstorage/:namespace", addSMBStorage)
 	router.POST("/apik3s/IPs/", addIPs)
 	router.DELETE("/apik3s/IPs/:id", deleteIPs)
 	router.DELETE("/apik3s/storage/:namespace/:id", deleteStorage)
 	router.DELETE("/apik3s/storage/:namespace", deleteWorkspace)
 	router.PATCH("/apik3s/storage/:namespace/:id", extendStorage)
-	router.Run("0.0.0.0:8888")
+	router.Run("0.0.0.0:8844")
 }
