@@ -1,4 +1,5 @@
 
+
 # APIK3S
 
 This is an api developed for communicate with a k3s cluster and automate the deploy of nfs server exposed by the cluster.
@@ -58,13 +59,13 @@ In Request sections you can see all supported request.
 
 ## POST Request
 
-there are two post request for this api
+there are three post request for this api
 
 | request path | requested body | request scope |
 | --- | --- | --- |
-| /apik3s/storage/root | {"id": "\*storage name\*","size": \*size in GB\*,  "type": "\*nfs or samba\*","ip": "\*ip address or auto\*"} | used for create a new storage, it create a new pvc a new deploy of the storage with 2 pod replica and if it not exist a new namespace. |
-| /apik3s/IPs | {"id": "\*pool name\*","ips":\["\*pool1\*","\*pool2\*"\]} | it create a new ip pool, it create a new IP Address pool and a new L2 Advertisement, is possible specify ips with an ip interval or using IP CIDR |
-
+| /apik3s/nfsstorage/root | {  <br>"id": "\*nfs storage name\*",  <br>"size": \*size in GB\*,  <br>"ip": "\*ip address or auto\*"  <br>} | used for create a new storage, it create a new pvc a new deploy of the storage with 1 pod replica and if it not exist a new namespace. |
+| /apik3s/smbstorage/root | {  <br>"id":"\*smb storage name\*",  <br>"size":"\*size in GB\*",  <br>"ip":"\*ip address or auto\*",  <br>"users":\[  <br>{  <br>"username":\*"client user"\*,  <br>"password":\*"client pass\*"  <br>}  <br>\],  <br>"workgroup":"\*domain name\*"  <br>} | used for create a new storage, it create a new pvc a new deploy of the smb storage with 1 pod replica and if it not exist a new namespace.  <br>it create inserted users and add it to smb_group.  <br>smb_group have access to samba shared directory. |
+| /apik3s/IPs | {  <br>"id": "\*pool name\*",  <br>"ips":\["\*pool1\*","\*pool2\*"\]  <br>} | it create a new ip pool, it create a new IP Address pool and a new L2 Advertisement, is possible specify ips with an ip interval or using IP CIDR |
 
 ## DELETE Request
 
@@ -85,6 +86,8 @@ This api use different go packager:
 - kubernetes client from: [kubernetes/client-go](https://github.com/kubernetes/client-go)
 - metallb client from: [openconfig/kne](https://github.com/openconfig/kne/tree/main/api/metallb/clientset/v1beta1)
 - metallb interfaces from: [metallb/metallb](https://github.com/metallb/metallb/tree/main/api/v1beta2)
+- nfs container: [alphayax/docker-volume-nfs](https://github.com/alphayax/docker-volume-nfs)
+- smb container: [raspyhades363/samba-server](https://hub.docker.com/r/raspyhades363/samba-server)
 ## Authors
 
 - [Massaroni Alex](https://www.github.com/rh363)
@@ -92,7 +95,6 @@ This api use different go packager:
 
 ## Roadmap
 
-- Add Samba support
 
 - Make code more light
 
