@@ -1523,5 +1523,5 @@ func main() {
 	router.DELETE("/apik3s/storage/:namespace/:id", deleteStorage)
 	router.DELETE("/apik3s/storage/:namespace", deleteWorkspace)
 	router.PATCH("/apik3s/storage/:namespace/:id", extendStorage)
-	router.Run("0.0.0.0:8844")
+	router.Run("0.0.0.0:8888")
 }
