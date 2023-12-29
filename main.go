@@ -3,7 +3,7 @@ NAME=APIK3S
 AUTHOR=RH363
 DATE=12/2023
 COMPANY=SEEWEB
-VERSION=1.3
+VERSION=1.4
 
 DESCRIPTION:
 
@@ -60,6 +60,12 @@ var ErrCantCreateDeploy error = errors.New("cannot create deploy")
 var ErrCantDeleteDeploy error = errors.New("cannot delete deploy")
 var ErrCantGetDeploy error = errors.New("cannot get deploy")
 var ErrContainerUnsupported = errors.New("actually this server type is not supported")
+
+// deploy ERROR
+var ErrSecretAlreadyExist error = errors.New("secret already exist")
+var ErrCantCreateSecret error = errors.New("cannot create secret")
+var ErrCantDeleteSecret error = errors.New("cannot delete secret")
+var ErrCantGetSecret error = errors.New("cannot get secret")
 
 // service ERROR
 var ErrServiceAlreadyExist error = errors.New("Service already exist")
@@ -421,12 +427,79 @@ func createNFSdeploy(namespace string, ID string, pvc string) error { //create n
 	return nil
 }
 
-func createSMBdeploy(namespace string, ID string, pvc string, users []smbuser, worksgroup string) error { //create smb deploy function (namespace target,deploy name and pod name(use it for match label),pvc volume name,users array([username=***,password=***],samba workgroup),)
-	fmt.Println("[0/3]try to create new smb deploy...")
-	usersDeployFmt := ""
-	for _, user := range users {
-		usersDeployFmt = usersDeployFmt + user.Username + "=" + user.Password + ";"
+func getSMBsecretDEV(namespace string) (*apiv1.SecretList, error) { //get secret function for DEV pourpose,it return the list but dont print it(namespace targets) list return
+
+	secretClient := clientset.CoreV1().Secrets(namespace) //create secret client for api
+
+	list, err := secretClient.List(context.TODO(), metav1.ListOptions{}) //get secret list
+	if err != nil {
+		fmt.Println(err)
+		return nil, ErrCantGetDeploy
 	}
+	return list, nil //return secret list
+}
+
+func deleteSMBsecret(namespace string, ID string) error { //delete secret function (namspace target,secret id to delete)
+	fmt.Println("Deleting secret...")
+	secretClient := clientset.CoreV1().Secrets(namespace)                   //create secret client for api
+	deletePolicy := metav1.DeletePropagationForeground                      //set delete policy
+	if err := secretClient.Delete(context.TODO(), ID, metav1.DeleteOptions{ //delete secret
+		PropagationPolicy: &deletePolicy,
+	}); err != nil {
+		fmt.Println(err)
+		return ErrCantDeleteDeploy
+	}
+	fmt.Println("secret deleted.")
+	return nil
+}
+
+func createSMBsecret(namespace string, id string, users []smbuser) error { //create smb secret function
+	fmt.Println("[0/3]try to create new smb secret...")
+	usersSecretFmt := ""
+	for _, user := range users {
+		usersSecretFmt = usersSecretFmt + user.Username + "=" + user.Password + ";"
+	}
+
+	list, err := getSMBsecretDEV(namespace) //check if secret already exist
+
+	if err != nil {
+		return ErrCantGetSecret
+	}
+
+	for _, secret := range list.Items {
+		if secret.Name == id {
+			fmt.Println("smb secret: \"" + id + "\" already exists")
+			return ErrSecretAlreadyExist
+		}
+	}
+
+	secretClient := clientset.CoreV1().Secrets(namespace) //create secret client for api
+	fmt.Println("[1/3]client set acquired")
+
+	var secret *apiv1.Secret
+
+	secret = &apiv1.Secret{ //create deployment for api (use similar json format)
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      id,
+			Namespace: namespace,
+		},
+		StringData: map[string]string{
+			"users": usersSecretFmt,
+		},
+	}
+
+	fmt.Println("[2/3]smb secret declared")
+	result, err := secretClient.Create(context.TODO(), secret, metav1.CreateOptions{}) //create secret using secret client and deploy file
+	if err != nil {
+		fmt.Println(err)
+		return ErrCantCreateSecret
+	}
+	fmt.Printf("[3/3]Created smb secret \"%q\".\n", result.GetObjectMeta().GetName())
+	return nil
+}
+
+func createSMBdeploy(namespace string, ID string, pvc string, worksgroup string) error { //create smb deploy function (namespace target,deploy name and pod name(use it for match label),pvc volume name,users array([username=***,password=***],samba workgroup),)
+	fmt.Println("[0/3]try to create new smb deploy...")
 
 	list, err := getdeploysDEV(namespace) //check if deploy already exist
 
@@ -473,10 +546,6 @@ func createSMBdeploy(namespace string, ID string, pvc string, users []smbuser, w
 							Image: "raspyhades363/samba-server", //container image
 							Env: []apiv1.EnvVar{
 								{
-									Name:  "SMBUSERS",
-									Value: usersDeployFmt,
-								},
-								{
 									Name:  "SMBWORKGROUP",
 									Value: worksgroup,
 								},
@@ -499,6 +568,10 @@ func createSMBdeploy(namespace string, ID string, pvc string, users []smbuser, w
 									Name:      "storage",
 									MountPath: "/sharing",
 								},
+								{
+									Name:      "secret",
+									MountPath: "/secret",
+								},
 							},
 						},
 					},
@@ -508,6 +581,14 @@ func createSMBdeploy(namespace string, ID string, pvc string, users []smbuser, w
 							VolumeSource: apiv1.VolumeSource{
 								PersistentVolumeClaim: &apiv1.PersistentVolumeClaimVolumeSource{
 									ClaimName: pvc,
+								},
+							},
+						},
+						{
+							Name: "secret",
+							VolumeSource: apiv1.VolumeSource{
+								Secret: &apiv1.SecretVolumeSource{
+									SecretName: ID,
 								},
 							},
 						},
@@ -1202,6 +1283,7 @@ func getStorages(context *gin.Context) {
 }
 
 func addSMBStorage(context *gin.Context) {
+	fmt.Println("add smb storage")
 	namespace := context.Param("namespace")
 
 	var request CreateSMBRequests
@@ -1215,7 +1297,7 @@ func addSMBStorage(context *gin.Context) {
 		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrInvalidSize.Error()})
 		return
 	}
-
+	fmt.Println("request is correct")
 	size := strconv.Itoa(request.Size) + "Gi"
 
 	namespacelist, err := getnamespacesDEV()
@@ -1225,17 +1307,25 @@ func addSMBStorage(context *gin.Context) {
 	}
 	for _, ns := range namespacelist.Items {
 		if ns.Name == namespace {
+			fmt.Println("namespace found")
 			if err := createpvc(namespace, request.ID, size); err != nil {
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 				return
 			}
-			if err := createSMBdeploy(namespace, request.ID, request.ID, request.Users, request.WORKGROUP); err != nil {
+			if err := createSMBsecret(namespace, request.ID, request.Users); err != nil {
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+				deletepvc(namespace, request.ID)
+				return
+			}
+			if err := createSMBdeploy(namespace, request.ID, request.ID, request.WORKGROUP); err != nil {
+				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+				deleteSMBsecret(namespace, request.ID)
 				deletepvc(namespace, request.ID)
 				return
 			}
 			if err := createSMBservice(request.ID, namespace, request.ID, request.IP); err != nil {
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+				deleteSMBsecret(namespace, request.ID)
 				deletedeploy(namespace, request.ID)
 				deletepvc(namespace, request.ID)
 				return
@@ -1244,19 +1334,13 @@ func addSMBStorage(context *gin.Context) {
 			return
 		}
 	}
+	fmt.Println("must create namespace")
 
 	if err := createnamespace(namespace); err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, ErrCantCreateNamespace)
 		return
 	}
-
-	if err := createconfigmap(namespace); err != nil {
-		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		if err := deletenamespace(namespace); err != nil {
-			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		}
-		return
-	}
+	fmt.Println("namespace created")
 
 	if err := createpvc(namespace, request.ID, size); err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
@@ -1265,13 +1349,23 @@ func addSMBStorage(context *gin.Context) {
 		}
 		return
 	}
-	if err := createSMBdeploy(namespace, request.ID, request.ID, request.Users, request.WORKGROUP); err != nil {
+	fmt.Println("pvc created")
+	if err := createSMBsecret(namespace, request.ID, request.Users); err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		if err := deletenamespace(namespace); err != nil {
 			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		}
 		return
 	}
+	fmt.Println("smb secret created")
+	if err := createSMBdeploy(namespace, request.ID, request.ID, request.WORKGROUP); err != nil {
+		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+		if err := deletenamespace(namespace); err != nil {
+			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+		}
+		return
+	}
+	fmt.Println("smb deploy created")
 	if err := createSMBservice(request.ID, namespace, request.ID, request.IP); err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		if err := deletenamespace(namespace); err != nil {
@@ -1279,6 +1373,7 @@ func addSMBStorage(context *gin.Context) {
 		}
 		return
 	}
+	fmt.Println("smb svc created")
 	context.IndentedJSON(http.StatusCreated, request)
 	return
 }
