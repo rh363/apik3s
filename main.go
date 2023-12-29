@@ -1430,16 +1430,14 @@ func addNFSStorage(context *gin.Context) {
 		}
 	}
 
-	if !cmccheck {
-		if err := createconfigmap(namespace); err != nil {
-			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-			return
-		}
-	}
-
 	for _, ns := range namespacelist.Items {
 		if ns.Name == namespace {
-
+			if !cmccheck {
+				if err := createconfigmap(namespace); err != nil {
+					context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+					return
+				}
+			}
 			if err := createpvc(namespace, request.ID, size); err != nil {
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 				return
