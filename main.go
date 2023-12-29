@@ -101,6 +101,7 @@ var ErrIPAddressPoolAlreadyExist error = errors.New("IPAddressPool already exist
 // configmap ERROR
 var ErrCantCreateConfigMap error = errors.New("cannot create configmap")
 var ErrCantDeleteConfigMap error = errors.New("cannot delete configmap")
+var ErrCantGetConfigmap error = errors.New("cannot get configmap")
 
 // // apik3s ERROR
 // JSON ERROR
@@ -1137,6 +1138,20 @@ func createconfigmap(Namespace string) error { //create configmap
 	return nil
 }
 
+func getconfigmapDEV(Namespace string) (*apiv1.ConfigMapList, error) { //get namespaces function
+
+	fmt.Println("Listing cm: ")
+	cmClient := clientset.CoreV1().ConfigMaps(Namespace) //create namespace client for api
+
+	list, err := cmClient.List(context.TODO(), metav1.ListOptions{}) //get namespace list
+	if err != nil {
+		fmt.Println(err)
+		return nil, ErrCantGetConfigmap
+	}
+
+	return list, nil
+}
+
 func deleteconfigmap(Namespace string) error { //delete cofigmap function(namespace target)
 	fmt.Println("Deleting configmap...")
 	configmapClient := clientset.CoreV1().ConfigMaps(Namespace)                           //create configmap client for k3s api
@@ -1400,8 +1415,31 @@ func addNFSStorage(context *gin.Context) {
 		context.IndentedJSON(http.StatusNotFound, Response{Message: err.Error()})
 		return
 	}
+
+	cmlist, err := getconfigmapDEV(namespace)
+	if err != nil {
+		context.IndentedJSON(http.StatusNotFound, Response{Message: err.Error()})
+		return
+	}
+
+	var cmccheck bool = false
+
+	for _, cm := range cmlist.Items {
+		if cm.Name == ConfigMapName {
+			cmccheck = true
+		}
+	}
+
+	if !cmccheck {
+		if err := createconfigmap(namespace); err != nil {
+			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+			return
+		}
+	}
+
 	for _, ns := range namespacelist.Items {
 		if ns.Name == namespace {
+
 			if err := createpvc(namespace, request.ID, size); err != nil {
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 				return
