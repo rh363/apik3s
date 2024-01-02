@@ -61,12 +61,6 @@ var ErrCantDeleteDeploy error = errors.New("cannot delete deploy")
 var ErrCantGetDeploy error = errors.New("cannot get deploy")
 var ErrContainerUnsupported = errors.New("actually this server type is not supported")
 
-// deploy ERROR
-var ErrSecretAlreadyExist error = errors.New("secret already exist")
-var ErrCantCreateSecret error = errors.New("cannot create secret")
-var ErrCantDeleteSecret error = errors.New("cannot delete secret")
-var ErrCantGetSecret error = errors.New("cannot get secret")
-
 // service ERROR
 var ErrServiceAlreadyExist error = errors.New("Service already exist")
 var ErrCantCreateService error = errors.New("cannot create Service")
@@ -556,86 +550,6 @@ func createNFSservice(serviceID string, namespace string, ID string, IP string) 
 		return ErrCantCreateService
 	}
 	fmt.Printf("[3/3]nfs Service created: \"%q\".\n", result.GetObjectMeta().GetName())
-	return nil
-}
-
-func createSMBservice(serviceID string, namespace string, ID string, IP string) error { //create smb service function (service ID(service name),namespace target,deployment target id,external ip)
-	fmt.Println("[0/3]try to create new smb service...")
-
-	list, err := getservicesDEV(namespace) //check if service already exist
-
-	if err != nil {
-		return ErrCantGetService
-	}
-
-	for _, service := range list.Items {
-		if service.Name == serviceID {
-			fmt.Println("smb service: \"" + serviceID + "\" already exists")
-			return ErrServiceAlreadyExist
-		}
-	}
-
-	svcClient := clientset.CoreV1().Services(namespace) //create service client for api
-	fmt.Println("[1/3]client set acquired")
-
-	service := &apiv1.Service{ //create service file for k3s api
-		ObjectMeta: metav1.ObjectMeta{
-			Name: serviceID,
-			Annotations: map[string]string{
-				"metallb.universe.tf/loadBalancerIPs": IP,
-			},
-		},
-		Spec: apiv1.ServiceSpec{
-			Type: apiv1.ServiceTypeLoadBalancer,
-			Ports: []apiv1.ServicePort{ //exposed ports
-				{
-					Name: "smb",
-					Port: 445,
-				},
-				{
-					Name: "nmb",
-					Port: 139,
-				},
-			},
-			Selector: map[string]string{ //deployments to expose, find by ID
-				"ID": ID,
-			},
-			//LoadBalancerIP: IP,
-		},
-	}
-
-	if IP == "auto" || IP == "" {
-		service = &apiv1.Service{ //create service file for k3s api
-			ObjectMeta: metav1.ObjectMeta{
-				Name: serviceID,
-			},
-			Spec: apiv1.ServiceSpec{
-				Type: apiv1.ServiceTypeLoadBalancer,
-				Ports: []apiv1.ServicePort{ //exposed ports
-					{
-						Name: "smb",
-						Port: 445,
-					},
-					{
-						Name: "nmb",
-						Port: 139,
-					},
-				},
-				Selector: map[string]string{ //deployments to expose, find by ID
-					"ID": ID,
-				},
-				//LoadBalancerIP: IP,
-			},
-		}
-	}
-
-	fmt.Println("[2/3]smb service declared")
-	result, err := svcClient.Create(context.TODO(), service, metav1.CreateOptions{}) //create service
-	if err != nil {
-		fmt.Println(err)
-		return ErrCantCreateService
-	}
-	fmt.Printf("[3/3]smb service created: \"%q\".\n", result.GetObjectMeta().GetName())
 	return nil
 }
 
