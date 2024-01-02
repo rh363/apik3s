@@ -3,7 +3,7 @@ NAME=APIK3S
 AUTHOR=RH363
 DATE=12/2023
 COMPANY=SEEWEB
-VERSION=1.4
+VERSION=1.5
 
 DESCRIPTION:
 
@@ -425,187 +425,6 @@ func createNFSdeploy(namespace string, ID string, pvc string) error { //create n
 		return ErrCantCreateDeploy
 	}
 	fmt.Printf("[3/3]Created nfs deployment \"%q\".\n", result.GetObjectMeta().GetName())
-	return nil
-}
-
-func getSMBsecretDEV(namespace string) (*apiv1.SecretList, error) { //get secret function for DEV pourpose,it return the list but dont print it(namespace targets) list return
-
-	secretClient := clientset.CoreV1().Secrets(namespace) //create secret client for api
-
-	list, err := secretClient.List(context.TODO(), metav1.ListOptions{}) //get secret list
-	if err != nil {
-		fmt.Println(err)
-		return nil, ErrCantGetDeploy
-	}
-	return list, nil //return secret list
-}
-
-func deleteSMBsecret(namespace string, ID string) error { //delete secret function (namspace target,secret id to delete)
-	fmt.Println("Deleting secret...")
-	secretClient := clientset.CoreV1().Secrets(namespace)                   //create secret client for api
-	deletePolicy := metav1.DeletePropagationForeground                      //set delete policy
-	if err := secretClient.Delete(context.TODO(), ID, metav1.DeleteOptions{ //delete secret
-		PropagationPolicy: &deletePolicy,
-	}); err != nil {
-		fmt.Println(err)
-		return ErrCantDeleteDeploy
-	}
-	fmt.Println("secret deleted.")
-	return nil
-}
-
-func createSMBsecret(namespace string, id string, users []smbuser) error { //create smb secret function
-	fmt.Println("[0/3]try to create new smb secret...")
-	usersSecretFmt := ""
-	for _, user := range users {
-		usersSecretFmt = usersSecretFmt + user.Username + "=" + user.Password + ";"
-	}
-
-	list, err := getSMBsecretDEV(namespace) //check if secret already exist
-
-	if err != nil {
-		return ErrCantGetSecret
-	}
-
-	for _, secret := range list.Items {
-		if secret.Name == id {
-			fmt.Println("smb secret: \"" + id + "\" already exists")
-			return ErrSecretAlreadyExist
-		}
-	}
-
-	secretClient := clientset.CoreV1().Secrets(namespace) //create secret client for api
-	fmt.Println("[1/3]client set acquired")
-
-	var secret *apiv1.Secret
-
-	secret = &apiv1.Secret{ //create deployment for api (use similar json format)
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      id,
-			Namespace: namespace,
-		},
-		StringData: map[string]string{
-			"users": usersSecretFmt,
-		},
-	}
-
-	fmt.Println("[2/3]smb secret declared")
-	result, err := secretClient.Create(context.TODO(), secret, metav1.CreateOptions{}) //create secret using secret client and deploy file
-	if err != nil {
-		fmt.Println(err)
-		return ErrCantCreateSecret
-	}
-	fmt.Printf("[3/3]Created smb secret \"%q\".\n", result.GetObjectMeta().GetName())
-	return nil
-}
-
-func createSMBdeploy(namespace string, ID string, pvc string, worksgroup string) error { //create smb deploy function (namespace target,deploy name and pod name(use it for match label),pvc volume name,users array([username=***,password=***],samba workgroup),)
-	fmt.Println("[0/3]try to create new smb deploy...")
-
-	list, err := getdeploysDEV(namespace) //check if deploy already exist
-
-	if err != nil {
-		return ErrCantGetDeploy
-	}
-
-	for _, deploy := range list.Items {
-		if deploy.Name == ID {
-			fmt.Println("smb deploy: \"" + ID + "\" already exists")
-			return ErrDeployAlreadyExist
-		}
-	}
-
-	deploymentsClient := clientset.AppsV1().Deployments(namespace) //create deployment client for api
-	fmt.Println("[1/3]client set acquired")
-
-	var deployment *appsv1.Deployment
-
-	deployment = &appsv1.Deployment{ //create deployment for api (use similar json format)
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ID, //deployment id
-			Labels: map[string]string{
-				"type": "smb",
-			},
-		},
-		Spec: appsv1.DeploymentSpec{ //deployment specs
-			Replicas: int32Ptr(1), //replica number
-			Selector: &metav1.LabelSelector{ //deployment selector
-				MatchLabels: map[string]string{
-					"ID": ID,
-				},
-			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{ //pod label for selector
-						"ID": ID,
-					},
-				},
-				Spec: apiv1.PodSpec{ //pod specs
-					Containers: []apiv1.Container{
-						{
-							Name:  "smb-server",                 //container name
-							Image: "raspyhades363/samba-server", //container image
-							Env: []apiv1.EnvVar{
-								{
-									Name:  "SMBWORKGROUP",
-									Value: worksgroup,
-								},
-							},
-							Ports: []apiv1.ContainerPort{
-								{
-									Name:          "smb", //smb port
-									ContainerPort: 445,
-								},
-								{
-									Name:          "nmb", //nmb port
-									ContainerPort: 139,
-								},
-							},
-							SecurityContext: &apiv1.SecurityContext{
-								Privileged: setTrue(), //set security context to privileged
-							},
-							VolumeMounts: []apiv1.VolumeMount{ //mount pvc volume
-								{
-									Name:      "storage",
-									MountPath: "/sharing",
-								},
-								{
-									Name:      "secret",
-									MountPath: "/secret",
-								},
-							},
-						},
-					},
-					Volumes: []apiv1.Volume{ //declare pvc volume
-						{
-							Name: "storage",
-							VolumeSource: apiv1.VolumeSource{
-								PersistentVolumeClaim: &apiv1.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvc,
-								},
-							},
-						},
-						{
-							Name: "secret",
-							VolumeSource: apiv1.VolumeSource{
-								Secret: &apiv1.SecretVolumeSource{
-									SecretName: ID,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	fmt.Println("[2/3]smb deploy declared")
-	result, err := deploymentsClient.Create(context.TODO(), deployment, metav1.CreateOptions{}) //create deploy using deployment client and deploy file
-	if err != nil {
-		fmt.Println(err)
-		return ErrCantCreateDeploy
-	}
-	fmt.Printf("[3/3]Created smb deployment \"%q\".\n", result.GetObjectMeta().GetName())
 	return nil
 }
 
@@ -1173,15 +992,10 @@ var explain = []Response{
 	{Message: "WARNING all instruction behind ** chars must be replaced with your data"},
 	{Message: "For get your storage servers send a GET request to: /apik3s/storage/*namespace*"},
 	{Message: "For get all workspace send a GET request to: /apik3s/storage/"},
-	{Message: "For create a new nfs server send a POST request to: /apik3s/nfsstorage/*namespace*"},
+	{Message: "For create a new nfs server send a POST request to: /apik3s/storage/*namespace*"},
 	{Message: `WARNING using POST request for create a new nfs server require an json file with the following structure:`},
 	{Message: `{"id":"*your nfs server id*","size":"*your nfs storage size in GB*","ip":"*server ip*"}`},
 	{Message: `EX: {"id": "testserver","size": 3,"ip": "10.2.15.224"}`},
-	{Message: `for auto assign ip insert : "auto" or ""`},
-	{Message: "For create a new smb server send a POST request to: /apik3s/smbstorage/*namespace*"},
-	{Message: `WARNING using POST request for create a new nfs server require an json file with the following structure:`},
-	{Message: `{"id":"*your nfs server id*","size":"*your nfs storage size in GB*","ip":"*server ip*","users":[{"username":*"client username"*,"password":*"client password*"}],"workgroup":"*workgroup name*}"`},
-	{Message: `EX: {"id": "testserver","size": 3,"ip": "10.2.15.224","workgroup":"myworkgroup","users":[{"username":"sambauser","password":"samba"}]}`},
 	{Message: `for auto assign ip insert : "auto" or ""`},
 	{Message: "For delete an storage server send a DELETE request to: /apik3s/storage/*insert namespace*/*insert server id*"},
 	{Message: "For delete all storage server in a workspace send a DELETE request to: /apik3s/storage/*insert namespace*"},
@@ -1218,19 +1032,6 @@ type CreateNFSRequests struct {
 	ID   string `json:"id"`
 	Size int    `json:"size"`
 	IP   string `json:"ip"`
-}
-
-type CreateSMBRequests struct {
-	ID        string    `json:"id"`
-	Size      int       `json:"size"`
-	IP        string    `json:"ip"`
-	WORKGROUP string    `json:"workgroup"`
-	Users     []smbuser `json:"users"`
-}
-
-type smbuser struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
 }
 
 type ExtendRequests struct {
@@ -1295,102 +1096,6 @@ func getStorages(context *gin.Context) {
 		}
 	}
 	context.IndentedJSON(http.StatusOK, servicesJSON)
-}
-
-func addSMBStorage(context *gin.Context) {
-	fmt.Println("add smb storage")
-	namespace := context.Param("namespace")
-
-	var request CreateSMBRequests
-
-	if err := context.BindJSON(&request); err != nil {
-		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrBadJsonFormat.Error()})
-		return
-	}
-
-	if request.Size < 1 {
-		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrInvalidSize.Error()})
-		return
-	}
-	fmt.Println("request is correct")
-	size := strconv.Itoa(request.Size) + "Gi"
-
-	namespacelist, err := getnamespacesDEV()
-	if err != nil {
-		context.IndentedJSON(http.StatusNotFound, Response{Message: err.Error()})
-		return
-	}
-	for _, ns := range namespacelist.Items {
-		if ns.Name == namespace {
-			fmt.Println("namespace found")
-			if err := createpvc(namespace, request.ID, size); err != nil {
-				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-				return
-			}
-			if err := createSMBsecret(namespace, request.ID, request.Users); err != nil {
-				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-				deletepvc(namespace, request.ID)
-				return
-			}
-			if err := createSMBdeploy(namespace, request.ID, request.ID, request.WORKGROUP); err != nil {
-				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-				deleteSMBsecret(namespace, request.ID)
-				deletepvc(namespace, request.ID)
-				return
-			}
-			if err := createSMBservice(request.ID, namespace, request.ID, request.IP); err != nil {
-				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-				deleteSMBsecret(namespace, request.ID)
-				deletedeploy(namespace, request.ID)
-				deletepvc(namespace, request.ID)
-				return
-			}
-			context.IndentedJSON(http.StatusCreated, request)
-			return
-		}
-	}
-	fmt.Println("must create namespace")
-
-	if err := createnamespace(namespace); err != nil {
-		context.IndentedJSON(http.StatusInternalServerError, ErrCantCreateNamespace)
-		return
-	}
-	fmt.Println("namespace created")
-
-	if err := createpvc(namespace, request.ID, size); err != nil {
-		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		if err := deletenamespace(namespace); err != nil {
-			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		}
-		return
-	}
-	fmt.Println("pvc created")
-	if err := createSMBsecret(namespace, request.ID, request.Users); err != nil {
-		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		if err := deletenamespace(namespace); err != nil {
-			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		}
-		return
-	}
-	fmt.Println("smb secret created")
-	if err := createSMBdeploy(namespace, request.ID, request.ID, request.WORKGROUP); err != nil {
-		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		if err := deletenamespace(namespace); err != nil {
-			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		}
-		return
-	}
-	fmt.Println("smb deploy created")
-	if err := createSMBservice(request.ID, namespace, request.ID, request.IP); err != nil {
-		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		if err := deletenamespace(namespace); err != nil {
-			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		}
-		return
-	}
-	fmt.Println("smb svc created")
-	context.IndentedJSON(http.StatusCreated, request)
-	return
 }
 
 func addNFSStorage(context *gin.Context) {
@@ -1647,8 +1352,7 @@ func main() {
 	router.GET("/apik3s/storage/:namespace", getStorages)
 	router.GET("/apik3s/storage/", getWorkspace)
 	router.GET("/apik3s/IPs/", getIPs)
-	router.POST("/apik3s/nfsstorage/:namespace", addNFSStorage)
-	router.POST("/apik3s/smbstorage/:namespace", addSMBStorage)
+	router.POST("/apik3s/storage/:namespace", addNFSStorage)
 	router.POST("/apik3s/IPs/", addIPs)
 	router.DELETE("/apik3s/IPs/:id", deleteIPs)
 	router.DELETE("/apik3s/storage/:namespace/:id", deleteStorage)
