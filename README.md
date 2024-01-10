@@ -42,7 +42,7 @@ systemctl daemon-reload
 systemctl enable --now apik3s.service
 ```
 
-Now apik3s tart listening on port 8888 automaticaly.
+Now apik3s start listening on port 8888 automaticaly.
 ## How to use
 For use this api a client must send http request to the api server. \
 In Request sections you can see all supported request.
