@@ -874,7 +874,7 @@ func createconfigmap(Namespace string) error { //create configmap
 	return nil
 }
 
-func getconfigmapDEV(Namespace string) (*apiv1.ConfigMapList, error) { //get namespaces function
+func getConfigMapDEV(Namespace string) (*apiv1.ConfigMapList, error) { //get namespaces function
 
 	fmt.Println("Listing cm: ")
 	cmClient := clientset.CoreV1().ConfigMaps(Namespace) //create namespace client for api
@@ -1029,122 +1029,127 @@ func getStorages(context *gin.Context) {
 	context.IndentedJSON(http.StatusOK, servicesJSON) //finnaly return the services array
 }
 
+/*
+this function is used for create a new nfs storage
+*/
 func addNFSStorage(context *gin.Context) {
-	namespace := context.Param("namespace")
+	givenNamespace := context.Param("namespace") //get storage namespace by url
 
-	var request CreateNFSRequests
+	var request CreateNFSRequests //create a new storage request
 
-	if err := context.BindJSON(&request); err != nil {
+	if err := context.BindJSON(&request); err != nil { //bind storage request by json input
 		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrBadJsonFormat.Error()})
 		return
 	}
 
-	if request.Size < 1 {
+	if request.Size < 1 { //check requested size
 		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrInvalidSize.Error()})
 		return
 	}
 
 	size := strconv.Itoa(request.Size) + "Gi"
 
-	namespacelist, err := getnamespacesDEV()
+	namespaceList, err := getnamespacesDEV() //get all namespace
 	if err != nil {
 		context.IndentedJSON(http.StatusNotFound, Response{Message: err.Error()})
 		return
 	}
 
-	cmlist, err := getconfigmapDEV(namespace)
+	configMapList, err := getConfigMapDEV(givenNamespace) //get all configmap in given namespace
 	if err != nil {
 		context.IndentedJSON(http.StatusNotFound, Response{Message: err.Error()})
 		return
 	}
 
-	var cmccheck bool = false
+	var configMapCheck bool = false //declare a bool var used for check in a configmap in this namespace is already created
 
-	for _, cm := range cmlist.Items {
-		if cm.Name == ConfigMapName {
-			cmccheck = true
+	for _, configMap := range configMapList.Items { //for all confimap in configmap list
+		if configMap.Name == ConfigMapName { //if configmap already exist
+			configMapCheck = true //set configmap check variable true
 		}
 	}
 
-	for _, ns := range namespacelist.Items {
-		if ns.Name == namespace {
-			if !cmccheck {
-				if err := createconfigmap(namespace); err != nil {
+	for _, namespace := range namespaceList.Items { //for all namespace in namespace list
+		if namespace.Name == givenNamespace { //if namespace is equal to the given namespace
+			if !configMapCheck { //if configmap check is false
+				if err := createconfigmap(givenNamespace); err != nil { //create a new confimap
 					context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 					return
 				}
-			}
-			if err := createpvc(namespace, request.ID, size); err != nil {
+			} //if configmap check is true
+			if err := createpvc(givenNamespace, request.ID, size); err != nil { //create a pvc
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 				return
 			}
-			if err := createNFSdeploy(namespace, request.ID, request.ID); err != nil {
+			if err := createNFSdeploy(givenNamespace, request.ID, request.ID); err != nil { //create an nfs deploy
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-				deletepvc(namespace, request.ID)
+				deletepvc(givenNamespace, request.ID) //if cant create deploy remove pvc
 				return
 			}
-			if err := createNFSservice(request.ID, namespace, request.ID, request.IP); err != nil {
+			if err := createNFSservice(request.ID, givenNamespace, request.ID, request.IP); err != nil { //create an nfs service
 				context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-				deletedeploy(namespace, request.ID)
-				deletepvc(namespace, request.ID)
+				deletedeploy(givenNamespace, request.ID) //if cant create service remove deploy
+				deletepvc(givenNamespace, request.ID)    //if cant create service remove pvc
 				return
 			}
-			context.IndentedJSON(http.StatusCreated, request)
+			context.IndentedJSON(http.StatusCreated, request) //return the request
 			return
 		}
-	}
+	} //if the given namespace is not found
 
-	if err := createnamespace(namespace); err != nil {
+	if err := createnamespace(givenNamespace); err != nil { //create a new namespace
 		context.IndentedJSON(http.StatusInternalServerError, ErrCantCreateNamespace)
 		return
 	}
 
-	if err := createconfigmap(namespace); err != nil {
+	if err := createconfigmap(givenNamespace); err != nil { //create a new configmap
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		if err := deletenamespace(namespace); err != nil {
+		if err := deletenamespace(givenNamespace); err != nil { //if cant create confimap remove namespace
 			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		}
 		return
 	}
 
-	if err := createpvc(namespace, request.ID, size); err != nil {
+	if err := createpvc(givenNamespace, request.ID, size); err != nil { //create a new pvc
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		if err := deletenamespace(namespace); err != nil {
+		if err := deletenamespace(givenNamespace); err != nil { //if cant create pvc remove namespace
 			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		}
 		return
 	}
-	if err := createNFSdeploy(namespace, request.ID, request.ID); err != nil {
+	if err := createNFSdeploy(givenNamespace, request.ID, request.ID); err != nil { //create a new nfs deploy
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		if err := deletenamespace(namespace); err != nil {
+		if err := deletenamespace(givenNamespace); err != nil { //if cant create deploy remove namespace
 			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		}
 		return
 	}
-	if err := createNFSservice(request.ID, namespace, request.ID, request.IP); err != nil {
+	if err := createNFSservice(request.ID, givenNamespace, request.ID, request.IP); err != nil { //create a new nfs service
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
-		if err := deletenamespace(namespace); err != nil {
+		if err := deletenamespace(givenNamespace); err != nil { //if cant create service remove namespace
 			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		}
 		return
 	}
-	context.IndentedJSON(http.StatusCreated, request)
-	return
+	context.IndentedJSON(http.StatusCreated, request) //return request
 }
 
+/*
+this function is used for delete an storage
+*/
 func deleteStorage(context *gin.Context) {
-	namespace := context.Param("namespace")
-	id := context.Param("id")
+	namespace := context.Param("namespace") // get storage namespace by url
+	id := context.Param("id")               // get storage id by url
 
-	if err := deleteservice(namespace, id); err != nil {
+	if err := deleteservice(namespace, id); err != nil { //delete storage service
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
-	if err := deletedeploy(namespace, id); err != nil {
+	if err := deletedeploy(namespace, id); err != nil { //delete storage deploy
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
-	if err := deletepvc(namespace, id); err != nil {
+	if err := deletepvc(namespace, id); err != nil { //delete storage pvc
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
@@ -1152,10 +1157,13 @@ func deleteStorage(context *gin.Context) {
 	context.IndentedJSON(http.StatusOK, DeleteResponse{ID: id, Message: "storage deleted"})
 }
 
+/*
+this function is used for remove a namespace and all his ccontent
+*/
 func deleteWorkspace(context *gin.Context) {
-	namespace := context.Param("namespace")
+	namespace := context.Param("namespace") // get namspace by url
 
-	if err := deletenamespace(namespace); err != nil {
+	if err := deletenamespace(namespace); err != nil { //delete namespace
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
@@ -1163,100 +1171,116 @@ func deleteWorkspace(context *gin.Context) {
 	context.IndentedJSON(http.StatusOK, DeleteResponse{ID: namespace, Message: "namespace deleted"})
 }
 
+/*
+this function is used to extend an existing storage
+*/
 func extendStorage(context *gin.Context) {
-	namespace := context.Param("namespace")
-	id := context.Param("id")
+	namespace := context.Param("namespace") // get storage namespace by url
+	id := context.Param("id")               // get storage id by url
 
-	pvc, err := getpvcsbyid(namespace, id)
+	pvc, err := getpvcsbyid(namespace, id) // get specific pvc by id
 	if err != nil {
 		context.IndentedJSON(http.StatusNotFound, Response{Message: err.Error()})
 		return
 	}
 
+	//declare an request variable with ExtendRequest type
 	var request ExtendRequests
 
-	if err := context.BindJSON(&request); err != nil {
+	if err := context.BindJSON(&request); err != nil { // bind request variable with input json
 		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrBadJsonFormat.Error()})
 		return
 	}
 
-	pvcsize := pvc.Spec.Resources.Requests.Storage().String()
-	pvcsize = strings.TrimRight(pvcsize, "Gi")
-	intpvcsize, _ := strconv.Atoi(pvcsize)
+	pvcsize := pvc.Spec.Resources.Requests.Storage().String() //get in string format current pvc size
+	pvcsize = strings.TrimRight(pvcsize, "Gi")                //remove Gi from string
+	intpvcsize, _ := strconv.Atoi(pvcsize)                    //convert pvc size in int
 
-	if request.Size <= intpvcsize {
-		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrSizeToSmall.Error()})
+	if request.Size <= intpvcsize { //if requested pvc size is smallest or equal to old pvc size
+		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrSizeToSmall.Error()}) //return an error
 		return
 	}
 
-	if err := updatepvc(namespace, id, strconv.Itoa(request.Size)+"Gi"); err != nil {
+	if err := updatepvc(namespace, id, strconv.Itoa(request.Size)+"Gi"); err != nil { //update pvc size
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
 
-	context.IndentedJSON(http.StatusOK, Response{Message: "updated to " + pvcsize + "GB"})
+	context.IndentedJSON(http.StatusOK, Response{Message: "updated to " + strconv.Itoa(request.Size) + "GB"}) //return an success message
 }
 
+/*
+this function return all current ip pool applied to metallb configuration
+*/
 func getIPs(context *gin.Context) {
-	ipsList, err := getIPAddressPoolsDEV()
+	ipsList, err := getIPAddressPoolsDEV() //get all ip pool list
 	if err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
+	//declare an pools array variable with IPpool type
 	var pools []IPpool
-	for _, ips := range ipsList.Items {
-		pools = append(pools, IPpool{ID: ips.Name, Ips: ips.Spec.Addresses})
+	for _, ips := range ipsList.Items { //for every ip pool in ip pool list
+		pools = append(pools, IPpool{ID: ips.Name, Ips: ips.Spec.Addresses}) //append this ip pool to the ip pool array
 	}
-	context.IndentedJSON(http.StatusOK, pools)
+	context.IndentedJSON(http.StatusOK, pools) //return the array such a json
 }
 
+/*
+this function is used for create a new ip pool
+*/
 func addIPs(context *gin.Context) {
 
+	//declare a new ip pool variable with IPpool type
 	var requestedPool IPpool
 
+	//bind new ip pool with input json
 	if err := context.BindJSON(&requestedPool); err != nil {
 		context.IndentedJSON(http.StatusBadRequest, Response{Message: ErrBadJsonFormat.Error()})
 		return
 	}
 
+	//get current ip pool list
 	ipsList, err := getIPAddressPoolsDEV()
 	if err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
 
-	for _, ips := range ipsList.Items {
-		if ips.Name == requestedPool.ID {
-			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
+	for _, ips := range ipsList.Items { //for every ip pool in ip pool list
+		if ips.Name == requestedPool.ID { // if ip pool is equal to requested ip pool
+			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()}) //return an error message
 			return
 		}
-	}
+	} //else
 
-	if err := createIPAdressPool(requestedPool.ID, requestedPool.Ips); err != nil {
+	if err := createIPAdressPool(requestedPool.ID, requestedPool.Ips); err != nil { //create a new ip pool
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
 
-	if err := createL2Advertisement(requestedPool.ID); err != nil {
-		if err := deleteIPAddressPool(requestedPool.ID); err != nil {
+	if err := createL2Advertisement(requestedPool.ID); err != nil { //create a new layer 2 advertisment
+		if err := deleteIPAddressPool(requestedPool.ID); err != nil { //if cant create layer 2 advertisment delete ip pool
 			context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		}
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
-
 	context.IndentedJSON(http.StatusCreated, requestedPool)
 }
 
+/*
+this function is used for delete an ip pool
+*/
 func deleteIPs(context *gin.Context) {
-	ID := context.Param("id")
+	ID := context.Param("id") //get ip pool name by url
 
-	if err := deleteIPAddressPool(ID); err != nil {
+	if err := deleteIPAddressPool(ID); err != nil { //delete ip pool
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
 
-	if err := deleteL2Advertisement(ID); err != nil {
+	if err := deleteL2Advertisement(ID); err != nil { //delete layer 2 advertisment
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
