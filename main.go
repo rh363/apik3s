@@ -567,6 +567,9 @@ func deleteservice(namespace string, serviceID string) error { //delete service 
 	return nil
 }
 
+/*
+return all active k3s service in a namespace
+*/
 func getservices(namespace string) (*apiv1.ServiceList, error) { //get services function(namespace target)
 
 	fmt.Println("Listing services in namespace: " + namespace)
@@ -578,7 +581,7 @@ func getservices(namespace string) (*apiv1.ServiceList, error) { //get services 
 		return nil, ErrCantGetService
 	}
 
-	for _, svc := range list.Items { //print service list and external ips
+	for _, svc := range list.Items { //for all service in service list print the service name and all service ip
 		if svc.Name != "kubernetes" {
 			fmt.Println("+service: " + svc.Name)
 			for i := 0; i < len(svc.Status.LoadBalancer.Ingress); i++ {
@@ -591,9 +594,9 @@ func getservices(namespace string) (*apiv1.ServiceList, error) { //get services 
 
 func getservicesDEV(namespace string) (*apiv1.ServiceList, error) { //get service function for DEV pourpose,only return list but dont print it(clientset,namespace target)
 
-	svcClient := clientset.CoreV1().Services(namespace)
+	svcClient := clientset.CoreV1().Services(namespace) //create service client for api
 
-	list, err := svcClient.List(context.TODO(), metav1.ListOptions{})
+	list, err := svcClient.List(context.TODO(), metav1.ListOptions{}) //get service list
 	if err != nil {
 		fmt.Println(err)
 		return nil, ErrCantGetService
@@ -958,58 +961,72 @@ type NfsStorage struct {
 	IP   string `json:"ip"`
 }
 
+/*
+simple return every possible operation in a json file
+*/
 func show(context *gin.Context) {
 	context.IndentedJSON(http.StatusOK, explain)
 }
 
+/*
+this function return a list of every namespace active in k3s cluster
+*/
 func getWorkspace(context *gin.Context) {
+	// get namespaces list
 	namespaces, err := getnamespacesDEV()
 	if err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
+	//declare workspaces array with Workspace type
 	var workspaces []Workspace
-	for _, ns := range namespaces.Items {
-		if ns.Name != "kube-system" && ns.Name != "kube-public" && ns.Name != "kube-node-lease" && ns.Name != "default" && ns.Name != "metallb-system" && ns.Name != "longhorn-system" {
-			workspaces = append(workspaces, Workspace{Name: ns.Name})
+	for _, namespace := range namespaces.Items { //for every namespace in namespace list if it isn't a default or a system namespace add it in workspaces array
+		if namespace.Name != "kube-system" && namespace.Name != "kube-public" && namespace.Name != "kube-node-lease" && namespace.Name != "default" && namespace.Name != "metallb-system" && namespace.Name != "longhorn-system" {
+			workspaces = append(workspaces, Workspace{Name: namespace.Name})
 		}
 	}
 	context.IndentedJSON(http.StatusOK, workspaces)
 }
 
+/*
+this function return every storage actualy active for a namespace
+*/
 func getStorages(context *gin.Context) {
+	//get namespace and service actives
+
 	namespace := context.Param("namespace")
-	ServiceList, err := getservices(namespace)
+	ServiceList, err := getservicesDEV(namespace)
 
 	if err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
-
+	//get all pvc in a namespace
 	PvcList, err := getpvcs(namespace)
 
 	if err != nil {
 		context.IndentedJSON(http.StatusInternalServerError, Response{Message: err.Error()})
 		return
 	}
+	//declare servicesJSON var with NfsStorage array type for save all service in json format
 	var servicesJSON []NfsStorage
 
-	for _, service := range ServiceList.Items {
-		if service.Name != "kubernetes" {
+	for _, service := range ServiceList.Items { //for every service in services list
+		if service.Name != "kubernetes" { //if service name is different by kubernetes
 			var newStorage NfsStorage
-			newStorage.ID = service.Name
-			for _, pvc := range PvcList.Items {
-				if pvc.Name == service.Name {
-					newStorage.Size = pvc.Spec.Resources.Requests.Storage().String()
+			newStorage.ID = service.Name        //create a newStorage With NfsStorage type and set his ID
+			for _, pvc := range PvcList.Items { //for every pvc in pvc list
+				if pvc.Name == service.Name { //if pvc name match service name
+					newStorage.Size = pvc.Spec.Resources.Requests.Storage().String() //set newStorage size by pvc
 				}
 			}
-			for i := 0; i < len(service.Status.LoadBalancer.Ingress); i++ {
-				newStorage.IP = service.Status.LoadBalancer.Ingress[i].IP
+			for i := 0; i < len(service.Status.LoadBalancer.Ingress); i++ { //for every service ip
+				newStorage.IP = service.Status.LoadBalancer.Ingress[i].IP //set ip in newStorage ip
 			}
-			servicesJSON = append(servicesJSON, newStorage)
+			servicesJSON = append(servicesJSON, newStorage) //append this storage in servicesJSON array
 		}
 	}
-	context.IndentedJSON(http.StatusOK, servicesJSON)
+	context.IndentedJSON(http.StatusOK, servicesJSON) //finnaly return the services array
 }
 
 func addNFSStorage(context *gin.Context) {
@@ -1248,19 +1265,26 @@ func deleteIPs(context *gin.Context) {
 
 // -------------------------------------------------------------------------------------------------------------------------------main function
 func main() {
+	//import k3s configuration file locate on local host if it doesn't exist panic
 	config, err := clientcmd.BuildConfigFromFlags("", ConfigFilePath)
 	if err != nil {
 		panic(err.Error())
 	}
+	//create a metallb client by imported configuration file, if cant create client panic
 	metallbClientSet, err = v1beta1.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
 	}
+	//create a kubernetes client by imported configuration file, if cant create client panic
 	clientset, err = kubernetes.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
 	}
 	_ = clientset
+	/*
+		create gin engine and se every path function,
+		next start gin engine listen.
+	*/
 	router := gin.Default()
 	router.GET("/", show)
 	router.GET("/apik3s/storage/:namespace", getStorages)
