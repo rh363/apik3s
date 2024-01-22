@@ -27,10 +27,8 @@ import (
 	"strconv"
 	"strings"
 
-	"bufio"
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/gin-gonic/gin"
 
@@ -62,7 +60,7 @@ var ErrCantGetDeploy error = errors.New("cannot get deploy")
 var ErrContainerUnsupported = errors.New("actually this server type is not supported")
 
 // service ERROR
-var ErrServiceAlreadyExist error = errors.New("Service already exist")
+var ErrServiceAlreadyExist error = errors.New("service already exist")
 var ErrCantCreateService error = errors.New("cannot create Service")
 var ErrCantDeleteService error = errors.New("cannot delete Service")
 var ErrCantGetService error = errors.New("cannot get Service")
@@ -75,7 +73,7 @@ var ErrCantGetPVC error = errors.New("cannot get PVC")
 var ErrPVCNotFound error = errors.New("PVC not found")
 
 // namespace ERROR
-var ErrNamespaceAlreadyExist error = errors.New("Namespace already exist")
+var ErrNamespaceAlreadyExist error = errors.New("namespace already exist")
 var ErrCantGetNamespace error = errors.New("cannot get namespace")
 var ErrCantCreateNamespace error = errors.New("cannot create namespace")
 var ErrCantDeleteNamespace error = errors.New("cannot delete namespace")
@@ -99,7 +97,7 @@ var ErrCantGetConfigmap error = errors.New("cannot get configmap")
 
 // // apik3s ERROR
 // JSON ERROR
-var ErrBadJsonFormat error = errors.New("Json format used is not valid")
+var ErrBadJsonFormat error = errors.New("json format used is not valid")
 
 // size ERROR
 var ErrInvalidSize error = errors.New("storage size received is not valid,insert only int > 0")
@@ -109,7 +107,7 @@ var ErrSizeToSmall error = errors.New("storage size received is not valid insert
 var ConfigFilePath string = "/etc/rancher/k3s/k3s.yaml"
 
 // ------------------------------------------------------------------------------------------------------------------------------utility function
-func prompt() { //it simple stop until user dont click enter, for test pourpouse
+/*func prompt() { //it simple stop until user dont click enter, for test pourpouse
 	fmt.Printf("-> Press Return key to continue.")
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
@@ -121,7 +119,7 @@ func prompt() { //it simple stop until user dont click enter, for test pourpouse
 	}
 	fmt.Println()
 }
-
+*/
 func int32Ptr(i int32) *int32 { return &i } //change int format,used for replica
 
 func setTrue() *bool { //return true value in specific format
@@ -135,8 +133,8 @@ func makeString(s string) *string { //return string in specific format
 
 // ------------------------------------------------------------------------------------------------------------------------------k3s api functions
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ipadresspool functions
-
-func getIPAddressPoolsDEV() (*metallbv1.IPAddressPoolList, error) { //get ip address pool function, return ip address list and an error if present withouth printing list
+// get ip address pool function, return ip address list and an error if present withouth printing list
+func getIPAddressPoolsDEV() (*metallbv1.IPAddressPoolList, error) {
 
 	fmt.Println("Listing IP address pool: ")
 	ipAddressPoolClient := metallbClientSet.IPAddressPool(MetallbNamespace) //create ip address pool client for api
@@ -149,26 +147,27 @@ func getIPAddressPoolsDEV() (*metallbv1.IPAddressPoolList, error) { //get ip add
 	return list, nil
 }
 
+/*
 func getIPAddressPools() (*metallbv1.IPAddressPoolList, error) { //get ip address pool function,return ip address list and an error if present
 
-	fmt.Println("Listing IP address pool: ")
-	ipAddressPoolClient := metallbClientSet.IPAddressPool(MetallbNamespace) //create ip address pool client for api
+		fmt.Println("Listing IP address pool: ")
+		ipAddressPoolClient := metallbClientSet.IPAddressPool(MetallbNamespace) //create ip address pool client for api
 
-	list, err := ipAddressPoolClient.List(context.TODO(), metav1.ListOptions{}) //get ip address pool list
-	if err != nil {
-		fmt.Println(err)
-		return nil, ErrCantGetIPAddressPool
-	}
-
-	for _, ipaddresspool := range list.Items {
-		fmt.Println("+ip address pool: " + ipaddresspool.Name)
-		for i := 0; i < len(ipaddresspool.Spec.Addresses); i++ {
-			fmt.Println("+--> ips: " + ipaddresspool.Spec.Addresses[i])
+		list, err := ipAddressPoolClient.List(context.TODO(), metav1.ListOptions{}) //get ip address pool list
+		if err != nil {
+			fmt.Println(err)
+			return nil, ErrCantGetIPAddressPool
 		}
-	}
-	return list, nil
-}
 
+		for _, ipaddresspool := range list.Items {
+			fmt.Println("+ip address pool: " + ipaddresspool.Name)
+			for i := 0; i < len(ipaddresspool.Spec.Addresses); i++ {
+				fmt.Println("+--> ips: " + ipaddresspool.Spec.Addresses[i])
+			}
+		}
+		return list, nil
+	}
+*/
 func createIPAdressPool(poolname string, pool []string) error { // create a new ip address pool require ip address pool name and pool array
 	fmt.Println("[0/3]try to create new namespace...")
 
@@ -236,26 +235,27 @@ func getL2AdvertisementDEV() (*metallbv1.L2AdvertisementList, error) { //get L2A
 	return list, nil
 }
 
+/*
 func getL2Advertisement() (*metallbv1.L2AdvertisementList, error) { //get L2Advertisement function
 
-	fmt.Println("Listing IP address pool: ")
-	L2AdvertisementClient := metallbClientSet.L2Advertisement(MetallbNamespace) //create L2Advertisement client for api
+		fmt.Println("Listing IP address pool: ")
+		L2AdvertisementClient := metallbClientSet.L2Advertisement(MetallbNamespace) //create L2Advertisement client for api
 
-	list, err := L2AdvertisementClient.List(context.TODO(), metav1.ListOptions{}) //get L2Advertisement list
-	if err != nil {
-		fmt.Println(err)
-		return nil, ErrCantGetL2Advertisement
-	}
-
-	for _, advertisement := range list.Items {
-		fmt.Println("+L2Advertisement: " + advertisement.Name)
-		for i := 0; i < len(advertisement.Spec.IPAddressPools); i++ {
-			fmt.Println("+--> ip address pool: " + advertisement.Spec.IPAddressPools[i])
+		list, err := L2AdvertisementClient.List(context.TODO(), metav1.ListOptions{}) //get L2Advertisement list
+		if err != nil {
+			fmt.Println(err)
+			return nil, ErrCantGetL2Advertisement
 		}
-	}
-	return list, nil
-}
 
+		for _, advertisement := range list.Items {
+			fmt.Println("+L2Advertisement: " + advertisement.Name)
+			for i := 0; i < len(advertisement.Spec.IPAddressPools); i++ {
+				fmt.Println("+--> ip address pool: " + advertisement.Spec.IPAddressPools[i])
+			}
+		}
+		return list, nil
+	}
+*/
 func createL2Advertisement(L2AdvertisementName string) error { // create L2Advertisement function
 	fmt.Println("[0/3]try to create new L2Advertisement...")
 
@@ -331,9 +331,7 @@ func createNFSdeploy(namespace string, ID string, pvc string) error { //create n
 	deploymentsClient := clientset.AppsV1().Deployments(namespace) //create deployment client for api
 	fmt.Println("[1/3]client set acquired")
 
-	var deployment *appsv1.Deployment
-
-	deployment = &appsv1.Deployment{ //create deployment for api (use similar json format)
+	deployment := &appsv1.Deployment{ //create deployment for api (use similar json format)
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ID, //deployment id
 			Labels: map[string]string{
@@ -436,24 +434,25 @@ func deletedeploy(namespace string, ID string) error { //delete deploy function 
 	return nil
 }
 
+/*
 func getdeploys(namespace string) (*appsv1.DeploymentList, error) { //get deploy function(namespace targets)
 
-	fmt.Println("Listing deployments in namespace: " + namespace)
-	deploymentsClient := clientset.AppsV1().Deployments(namespace) //create deployment client for api
+		fmt.Println("Listing deployments in namespace: " + namespace)
+		deploymentsClient := clientset.AppsV1().Deployments(namespace) //create deployment client for api
 
-	list, err := deploymentsClient.List(context.TODO(), metav1.ListOptions{}) //get deployments list
-	if err != nil {
-		fmt.Println(err)
-		return nil, ErrCantGetDeploy
+		list, err := deploymentsClient.List(context.TODO(), metav1.ListOptions{}) //get deployments list
+		if err != nil {
+			fmt.Println(err)
+			return nil, ErrCantGetDeploy
+		}
+
+		for _, deploy := range list.Items { //print deployments list
+			fmt.Println("+deploy: \"" + deploy.Name + "\"")
+		}
+
+		return list, nil
 	}
-
-	for _, deploy := range list.Items { //print deployments list
-		fmt.Println("+deploy: \"" + deploy.Name + "\"")
-	}
-
-	return list, nil
-}
-
+*/
 func getdeploysDEV(namespace string) (*appsv1.DeploymentList, error) { //get deploy function for DEV pourpose,it return the list but dont print it(namespace targets) list return
 
 	deploymentsClient := clientset.AppsV1().Deployments(namespace) //create deployment client for api
@@ -568,30 +567,29 @@ func deleteservice(namespace string, serviceID string) error { //delete service 
 }
 
 /*
-return all active k3s service in a namespace
-*/
+//return all active k3s service in a namespace
 func getservices(namespace string) (*apiv1.ServiceList, error) { //get services function(namespace target)
 
-	fmt.Println("Listing services in namespace: " + namespace)
-	svcClient := clientset.CoreV1().Services(namespace) //create service client for api
+		fmt.Println("Listing services in namespace: " + namespace)
+		svcClient := clientset.CoreV1().Services(namespace) //create service client for api
 
-	list, err := svcClient.List(context.TODO(), metav1.ListOptions{}) //get service list
-	if err != nil {
-		fmt.Println(err)
-		return nil, ErrCantGetService
-	}
+		list, err := svcClient.List(context.TODO(), metav1.ListOptions{}) //get service list
+		if err != nil {
+			fmt.Println(err)
+			return nil, ErrCantGetService
+		}
 
-	for _, svc := range list.Items { //for all service in service list print the service name and all service ip
-		if svc.Name != "kubernetes" {
-			fmt.Println("+service: " + svc.Name)
-			for i := 0; i < len(svc.Status.LoadBalancer.Ingress); i++ {
-				fmt.Println("+--->ip: " + svc.Status.LoadBalancer.Ingress[i].IP)
+		for _, svc := range list.Items { //for all service in service list print the service name and all service ip
+			if svc.Name != "kubernetes" {
+				fmt.Println("+service: " + svc.Name)
+				for i := 0; i < len(svc.Status.LoadBalancer.Ingress); i++ {
+					fmt.Println("+--->ip: " + svc.Status.LoadBalancer.Ingress[i].IP)
+				}
 			}
 		}
+		return list, nil
 	}
-	return list, nil
-}
-
+*/
 func getservicesDEV(namespace string) (*apiv1.ServiceList, error) { //get service function for DEV pourpose,only return list but dont print it(clientset,namespace target)
 
 	svcClient := clientset.CoreV1().Services(namespace) //create service client for api
@@ -801,24 +799,25 @@ func createnamespace(Namespace string) error { //create namespace function (name
 	return nil
 }
 
+/*
 func getnamespaces() (*apiv1.NamespaceList, error) { //get namespaces function()
 
-	fmt.Println("Listing namespace: ")
-	namespaceClient := clientset.CoreV1().Namespaces() //create namespace client for api
+		fmt.Println("Listing namespace: ")
+		namespaceClient := clientset.CoreV1().Namespaces() //create namespace client for api
 
-	list, err := namespaceClient.List(context.TODO(), metav1.ListOptions{}) //get namespace list
-	if err != nil {
-		fmt.Println(err)
-		return nil, ErrCantGetNamespace
+		list, err := namespaceClient.List(context.TODO(), metav1.ListOptions{}) //get namespace list
+		if err != nil {
+			fmt.Println(err)
+			return nil, ErrCantGetNamespace
+		}
+
+		for _, namespace := range list.Items { //print namespace list
+			fmt.Println("+namespace: " + namespace.Name)
+		}
+
+		return list, nil
 	}
-
-	for _, namespace := range list.Items { //print namespace list
-		fmt.Println("+namespace: " + namespace.Name)
-	}
-
-	return list, nil
-}
-
+*/
 func getnamespacesDEV() (*apiv1.NamespaceList, error) { //get namespaces function
 
 	fmt.Println("Listing namespace: ")
@@ -888,6 +887,7 @@ func getConfigMapDEV(Namespace string) (*apiv1.ConfigMapList, error) { //get nam
 	return list, nil
 }
 
+/*
 func deleteconfigmap(Namespace string) error { //delete cofigmap function(namespace target)
 	fmt.Println("Deleting configmap...")
 	configmapClient := clientset.CoreV1().ConfigMaps(Namespace)                           //create configmap client for k3s api
@@ -901,7 +901,7 @@ func deleteconfigmap(Namespace string) error { //delete cofigmap function(namesp
 	fmt.Println("configmap deleted.")
 	return nil
 }
-
+*/
 // -------------------------------------------------------------------------------------------------------------------------------api rest functions
 
 var explain = []Response{
